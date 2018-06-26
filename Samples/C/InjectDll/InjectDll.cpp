@@ -33,6 +33,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "..\..\..\Include\NktHookLib.h"
+#include <stdint.h>
+#include <string>
 
 //-----------------------------------------------------------
 
@@ -81,7 +83,7 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
   //check arguments
   if (argc < 3)
   {
-    wprintf_s(L"Use: InjectDLL path-to-exe|process-id path-to-dll [initialize-function-name]\n");
+    wprintf_s(L"Use: InjectDLL path-to-exe|process-id path-to-dll [initialize-function-name] [-- Args..]\n");
     return 1;
   }
   //if first argument is numeric, assume a process ID
@@ -119,7 +121,7 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
 
   //is initialize function specified?
   szInitFunctionA = NULL;
-  if (argc >= 4 && argv[3][0] != 0)
+  if (argc >= 4 && argv[3][0] != 0 && std::wstring(argv[3]) != L"--")
   {
     szInitFunctionA = ToAnsi(argv[3]);
     if (!szInitFunctionA)
@@ -127,6 +129,17 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
       wprintf_s(L"Error: Not enough memory.\n");
       return 1;
     }
+  }
+
+  wchar_t* args = NULL;
+  int argsSepIdx = szInitFunctionA ? 4 : 3;
+  if (argc >= argsSepIdx + 2 && std::wstring(argv[argsSepIdx]) == L"--")
+  {
+	  std::wstring cmdLineInput = GetCommandLineW();
+	  std::wstring argsString = cmdLineInput.substr(cmdLineInput.find(L"--") + 2);
+	  args = new wchar_t[argsString.size() + 1];
+	  memcpy(args, argsString.c_str(), sizeof(wchar_t) * argsString.size());
+	  args[argsString.size()] = L'\0';
   }
 
   //execute action
@@ -158,11 +171,41 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
     memset(&sSiW, 0, sizeof(sSiW));
     sSiW.cb = (DWORD)sizeof(sSiW);
     memset(&sPi, 0, sizeof(sPi));
-    dwOsErr = NktHookLibHelpers::CreateProcessWithDllW(szExeNameW, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &sSiW, &sPi,
-                                                       szDllToInjectNameW, NULL, szInitFunctionA);
+    dwOsErr = NktHookLibHelpers::CreateProcessWithDllW(szExeNameW, args, NULL, NULL, FALSE, 
+													   CREATE_SUSPENDED, NULL, NULL, &sSiW, &sPi,
+													   szDllToInjectNameW, NULL, szInitFunctionA);
+
     if (dwOsErr == ERROR_SUCCESS)
     {
       wprintf_s(L"Process #%lu successfully launched with dll injected!\n", sPi.dwProcessId);
+
+// 	  {
+// 		  printf("Waiting for debugger attach to %lu", sPi.dwProcessId);
+// 		  uint32_t timeout = 0;
+// 
+// 		  BOOL debuggerAttached = FALSE;
+// 
+// 		  uint32_t DelayForDebugger = 30;
+// 		  while (!debuggerAttached)
+// 		  {
+// 			  CheckRemoteDebuggerPresent(sPi.hProcess, &debuggerAttached);
+// 
+// 			  Sleep(10);
+// 			  timeout += 10;
+// 
+// 			  if (timeout > DelayForDebugger * 1000)
+// 				  break;
+// 		  }
+// 
+// 		  if (debuggerAttached)
+// 			  printf("Debugger attach detected after %.2f s", float(timeout) / 1000.0f);
+// 		  else
+// 			  printf("Timed out waiting for debugger, gave up after %u s", DelayForDebugger);
+// 
+// 	  }
+
+	  ResumeThread(sPi.hThread);
+
       ::CloseHandle(sPi.hThread);
       ::CloseHandle(sPi.hProcess);
     }
@@ -172,6 +215,7 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
     }
   }
   free(szInitFunctionA);
+  delete[] args;
   return (dwOsErr == ERROR_SUCCESS) ? 0 : 2;
 }
 
