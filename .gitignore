@@ -49,3 +49,5 @@ bin64/
 bin/
 .vs/
 *.opensdf
+*.HavokScriptPlugin
+*.dat
