@@ -1,3 +1,0 @@
-[submodule "Src/Lib/libudis86/source"]
-	path = Src/Lib/libudis86/source
-	url = https://github.com/vmt/udis86
