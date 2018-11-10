@@ -51,7 +51,7 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
   //check arguments
   if (argc < 3)
   {
-    wprintf_s(L"Use: InjectDLL path-to-exe|process-id path-to-dll [initialize-function-name] [-- Args..]\n");
+    wprintf_s(L"Use: InjectDLL path-to-exe|process-id path-to-dll [initialize-function-name] [-d] [-- Args..]\n");
     return 1;
   }
   //if first argument is numeric, assume a process ID
@@ -88,10 +88,12 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
   szDllToInjectNameW = argv[2];
 
   //is initialize function specified?
+  int nextArgIdx = 3;
   szInitFunctionA = NULL;
-  if (argc >= 4 && argv[3][0] != 0 && std::wstring(argv[3]) != L"--")
+  if (nextArgIdx < argc && argv[nextArgIdx][0] != '\0' && argv[nextArgIdx][0] != L'-')
   {
-    szInitFunctionA = ToAnsi(argv[3]);
+    szInitFunctionA = ToAnsi(argv[nextArgIdx]);
+	++nextArgIdx;
     if (!szInitFunctionA)
     {
       wprintf_s(L"Error: Not enough memory.\n");
@@ -99,9 +101,15 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
     }
   }
 
+  bool waitForDebugger = false;
+  if (nextArgIdx < argc && std::wstring(argv[nextArgIdx]) == L"-d")
+  {
+	waitForDebugger = true;
+	++nextArgIdx;
+  }
+
   wchar_t* args = NULL;
-  int argsSepIdx = szInitFunctionA ? 4 : 3;
-  if (argc >= argsSepIdx + 2 && std::wstring(argv[argsSepIdx]) == L"--")
+  if (nextArgIdx + 1 < argc && std::wstring(argv[nextArgIdx]) == L"--")
   {
 	  std::wstring cmdLineInput = GetCommandLineW();
 	  std::wstring argsString = cmdLineInput.substr(cmdLineInput.find(L"--") + 2);
@@ -147,30 +155,31 @@ int __CRTDECL wmain(__in int argc, __in wchar_t *argv[], __in wchar_t *envp[])
     {
       wprintf_s(L"Process #%lu successfully launched with dll injected!\n", sPi.dwProcessId);
 
-// 	  {
-// 		  printf("Waiting for debugger attach to %lu", sPi.dwProcessId);
-// 		  uint32_t timeout = 0;
-// 
-// 		  BOOL debuggerAttached = FALSE;
-// 
-// 		  uint32_t DelayForDebugger = 30;
-// 		  while (!debuggerAttached)
-// 		  {
-// 			  CheckRemoteDebuggerPresent(sPi.hProcess, &debuggerAttached);
-// 
-// 			  Sleep(10);
-// 			  timeout += 10;
-// 
-// 			  if (timeout > DelayForDebugger * 1000)
-// 				  break;
-// 		  }
-// 
-// 		  if (debuggerAttached)
-// 			  printf("Debugger attach detected after %.2f s", float(timeout) / 1000.0f);
-// 		  else
-// 			  printf("Timed out waiting for debugger, gave up after %u s", DelayForDebugger);
-// 
-// 	  }
+	  if (waitForDebugger)
+	  {
+		  printf("Waiting for debugger attach to %lu", sPi.dwProcessId);
+		  uint32_t timeout = 0;
+
+		  BOOL debuggerAttached = FALSE;
+
+		  uint32_t DelayForDebugger = 30;
+		  while (!debuggerAttached)
+		  {
+			  CheckRemoteDebuggerPresent(sPi.hProcess, &debuggerAttached);
+
+			  Sleep(10);
+			  timeout += 10;
+
+			  if (timeout > DelayForDebugger * 1000)
+				  break;
+		  }
+
+		  if (debuggerAttached)
+			  printf("Debugger attach detected after %.2f s", float(timeout) / 1000.0f);
+		  else
+			  printf("Timed out waiting for debugger, gave up after %u s", DelayForDebugger);
+
+	  }
 
 	  ResumeThread(sPi.hThread);
 
